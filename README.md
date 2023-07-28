@@ -21,3 +21,7 @@ There are in .github/workflows/ files:
 # Deploy 
 Note: need to update in rpcjson.ino file STASSID  and STAPSK  macro definitions
 
+# EEPROM layout
+- 1st byte: URL string size
+- 2nd byte: simple checksum for URL string
+- 3rd byte: 1st character of URL 
