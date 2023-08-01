@@ -2,10 +2,15 @@
 
 #include <vector>
 #include <string>
-#include  <Arduino_JSON.h>
-#include <Ed25519.h>
 #include "Encoder.h"
 #include "Utils.h"
+#include "Defines.h"
+
+#ifndef UNIT_TEST
+#include <Ed25519.h>
+#else
+#include "cryptopp/donna.h"
+#endif
 
 std::vector<uint8_t> doPayload (Data call, uint32_t era, uint64_t nonce, uint64_t tip, uint32_t sv, uint32_t tv, std::string gen, std::string block) {
     Data data;
@@ -25,14 +30,18 @@ std::vector<uint8_t> doPayload (Data call, uint32_t era, uint64_t nonce, uint64_
 }
 
 std::vector<uint8_t> doSign(Data data, uint8_t privateKey[32], uint8_t publicKey[32]) {
-  
+
     uint8_t payload[data.size()];             
-    uint8_t sig[64];
+    uint8_t sig[SIGNATURE_SIZE];
      
     std::copy(data.begin(), data.end(), payload);
+#ifndef UNIT_TEST
     Ed25519::sign(sig, privateKey, publicKey, payload, data.size());
-           
-    std::vector<byte> signature (sig,sig + 64);   // signed data as bytes vector
+#else
+    //do like Arduino Ed25519::sign() for unit test, i.e. by crypto++ library
+    CryptoPP::Donna::ed25519_sign(payload, data.size(), privateKey, publicKey, sig);
+#endif
+    std::vector<byte> signature (sig,sig + SIGNATURE_SIZE);   // signed data as bytes vector
     return signature;
 }
 
