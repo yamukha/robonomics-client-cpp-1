@@ -21,7 +21,11 @@ There are in .github/workflows/ files:
 # Deploy 
 Note: need to update in rpcjson.ino file STASSID  and STAPSK  macro definitions
 
+# Setup or update robonomics URL
+To set up the new robonomics URL can be used Arduino SDK Serial Monitor or any other SW able to communicate over serial port (115200N8).
+After ESP8266 reset you have 3 seconds window to send URL as string, i.e.:  http://kusama.rpc.robonomics.network/rpc/ or http://192.168.0.102:9933
+
 # EEPROM layout
 - 1st byte: URL string size
 - 2nd byte: simple checksum for URL string
-- 3rd byte: 1st character of URL 
+- 3rd byte: 1st character of URL
