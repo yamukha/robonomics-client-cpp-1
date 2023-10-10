@@ -26,3 +26,16 @@ std::string swapEndian(std::string str) {
     }
     return bytes;
 }
+
+bool getTypeUrl(std::string url) {
+    if (url.find("http://kusama.rpc.robonomics.network/rpc/") != std::string::npos)
+      return true;
+    return false;
+}
+
+std::string getBlockHash (bool is_remote) {
+    if (is_remote)
+      return "631ccc82a078481584041656af292834e1ae6daab61d2875b4dd0c14bb9b17bc";
+    else 
+      return "60ac92592dd51574a8bfa8094deae863f2e2ffe86889bef466d9768c625467ed";
+}

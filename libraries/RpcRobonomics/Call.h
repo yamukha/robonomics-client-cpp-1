@@ -23,3 +23,22 @@ std::vector<uint8_t> callTransferBalance (Data head, std::string str, uint64_t f
     append(call, encodeCompact(fee)); // value
     return call;
 }
+
+std::vector<uint8_t> callLaunch (Data head, std::string robot, std::string param) {
+    Data call;
+    append(call, head); 
+    std::vector<uint8_t> dst = hex2bytes (robot.c_str()); // derived SS58KEY from SS58DST 
+    append(call, dst);
+    std::vector<uint8_t>  h256 = hex2bytes (param.c_str()); 
+    append(call, h256); // add param as H256 data
+    return call;
+}
+
+std::vector<uint8_t> callRws (Data head, std::string owner, Data param) {
+    Data call;
+    append(call, head); 
+    std::vector<uint8_t> dst = hex2bytes (owner.c_str());
+    append(call, dst);   // add owner pub key 
+    append(call, param); // add nested call
+    return call;
+}

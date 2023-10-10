@@ -25,7 +25,7 @@ typedef struct {
 FromJson parseJson (JSONVar val) {
    Serial.println(val);
    FromJson fj;
-   
+
    std::string nonce_ =  (const char*) (val[0]);
    std::string specVersion_ = (const char*)(val[1]);
    std::string tip_ =  (const char*)(val[2]);
@@ -33,30 +33,29 @@ FromJson parseJson (JSONVar val) {
    std::string tx_version_ = (const char*) (val[4]);
 
    std::string nonceS  = swapEndian (nonce_);
-   fj.nonce =  strtol(nonceS.c_str(), NULL, 16);
+   fj.nonce =  strtoul(nonceS.c_str(), NULL, 16);
 
    std::string tipS = swapEndian (tip_);
-   fj.tip =  strtol(tipS.c_str(), NULL, 16);
+   fj.tip =  strtoul(tipS.c_str(), NULL, 16);
 
    std::string specVer = swapEndian (specVersion_);
-   fj.specVersion =  strtol(specVer.c_str(), NULL, 16);
+   fj.specVersion =  strtoul(specVer.c_str(), NULL, 16);
 
    std::string txVer = swapEndian (tx_version_);
-   fj.tx_version = strtol(txVer.c_str(), NULL, 16); 
+   fj.tx_version = strtoul(txVer.c_str(), NULL, 16); 
   
    std::string eraS = swapEndian (era_);
-   fj.era = strtol(eraS.c_str(), NULL, 16);
+   fj.era = strtoul(eraS.c_str(), NULL, 16);
 
-   fj.ghash = GENESIS_HASH_REMOTE;
-   fj.bhash = GENESIS_HASH_REMOTE;
+   fj.ghash = "";
+   fj.bhash = "";
 
-#ifdef DEBUG_JSON                   
-   Serial.println(fj.ghash.c_str());
-   Serial.printf("nonce: %ld\n",fj.nonce);
-   Serial.printf("specVersion: %ld\n",fj.specVersion);
-   Serial.printf("tip: %ld\n",fj.tip); 
-   Serial.printf("era: %ld\n",fj.era);
-   Serial.printf("tx_version: %ld\n",fj.tx_version);
+#ifdef DEBUG_PRINT
+   Serial.printf("nonce encoded & swapped: 0x%x\n",fj.nonce);
+   Serial.printf("specVersion: %lu\n",fj.specVersion);
+   Serial.printf("tip: %lu\n",fj.tip); 
+   Serial.printf("era: %lu\n",fj.era);
+   Serial.printf("tx_version: %lu\n",fj.tx_version);
 #endif
 
    return fj;
