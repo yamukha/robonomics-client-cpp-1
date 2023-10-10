@@ -16,6 +16,7 @@ std::vector<uint8_t> doPayload (Data call, uint32_t era, uint64_t nonce, uint64_
     Data data;
     append(data, call);
     append(data, encodeCompact(era)); // era; note: it simplified to encode, maybe need to rewrite
+
     append(data, encodeCompact(nonce));
     append(data, encodeCompact(tip));
               
@@ -57,7 +58,7 @@ std::vector<uint8_t> doEncode (Data signature, Data pubKey, uint32_t era, uint64
               
     // era / nonce / tip // append(edata, encodeEraNonceTip());
     append(edata, encodeCompact(era)); // era; note: it simplified to encode, maybe need to rewrite
-    append(edata, encodeCompact(nonce)); 
+    append(edata, encodeCompact(nonce));
     append(edata, encodeCompact(tip));                            
   
     append(edata, call);

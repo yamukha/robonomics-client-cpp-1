@@ -93,3 +93,67 @@ inline void encodeLengthPrefix(Data& data) {
     auto prefix = encodeCompact(len);
     data.insert(data.begin(), prefix.begin(), prefix.end());
 }
+
+
+uint32_t swapU16 (uint32_t value) {
+    uint32_t low  = value % 256;
+    uint32_t high = value / 256;
+    return low * 256 + high;
+}
+
+uint32_t swapU32 (uint32_t value) {
+    uint32_t low  =  value & 0x000000ff;
+    uint32_t mid1 = (value & 0x0000ff00 ) / 256;
+    uint32_t mid2 = (value & 0x00ff0000 ) / (256 * 256);
+    uint32_t high = (value & 0xff000000 ) / (256 * 256 * 256);
+    return low * 256 * 256 * 256 +  mid1 * 256 * 256 +  mid2 * 256 + high;
+}
+
+// to test decoder ref https://github.com/qdrvm/scale-codec-cpp/blob/master/test/scale_compact_test.cpp
+uint32_t decodeU32 (uint32_t value, bool swap) {
+    uint32_t decoded = 0;
+    uint32_t mode  = 0;
+    uint32_t swapped = 0;
+
+    if (value < 0x100) {
+        mode = value % 4;
+    }
+
+    if (value > 0xFF && value <= 0xFFFF) {
+      if (swap) 
+         swapped = swapU16 (value);
+      else
+         swapped = value;
+      mode = swapped % 4;
+    }
+
+    if (value > 0xFFFF && value <= 0xFFFFFFFF) {
+      if (swap) 
+         swapped = swapU32 (value);
+      else
+         swapped = value;
+      mode = swapped % 4;
+    }
+
+    switch(mode) {
+        case 0: 
+            decoded = value / 4;
+            break;
+        case 1:
+            if (swap)
+              decoded =  swapU16 (value) / 4;
+            else
+              decoded =  value / 4;
+            break;
+        case 2: 
+            if (swap)
+              decoded =  swapU32 (value) / 4;
+            else
+              decoded =  value / 4;
+            break;
+        default: // TODO BigInt https://docs.substrate.io/reference/scale-codec/#fn-1
+            break;
+    }
+
+    return decoded;
+}
