@@ -18,6 +18,8 @@
 #include <iostream>
 #include <cassert>
 
+#define PRIVKEY      "da3cf5b1e9144931a0f0db65664aab662673b099415a7f8121b7245fb0be4143"
+
 void printBytes (Data data) {
    for (auto val : data) 
       printf("%.2x", val);
@@ -126,7 +128,7 @@ Data data = Data {
   assert(std::equal(std::begin(signature), std::end(signature), std::begin(signaturePattern)) && "Bytes vector is not equal to expected pattern");
 }
 
-void  test_doEncode() {
+void test_doEncode() {
     //doEncode (Data, Data, uint32_t, uint64_t, uint64_t, Data)
     Data signature = Data {
     0x68, 0xd4, 0xd0, 0x1a, 0x5d, 0xd9, 0x8e, 0xbc,
@@ -177,9 +179,100 @@ void  test_doEncode() {
     assert(std::equal(std::begin(edata), std::end(edata), std::begin(edataPattern)) && "Bytes vector is not equal to expected pattern");
 }
 
+// based on number pairs from https://github.com/qdrvm/scale-codec-cpp/blob/master/test/scale_compact_test.cpp
+void test_DecodeU32() {
+  // test 1 byte encoded mode: swap bytes flag is false
+  uint64_t decode_0 = decodeU32 (0, false);
+  assert (decode_0 == 0 && "Scale compact decoder error for 0");
+
+  uint64_t decode_1 = decodeU32 (4, false);
+  assert (decode_1 == 1 && "Scale compact decoder error for 1");
+
+  uint64_t decode_63 = decodeU32 (252, false);
+  assert (decode_63 == 63 && "Scale compact decoder error for 63");
+
+  // test 2 bytes encoded mode: swap bytes flag is false
+  uint64_t decode_64 = decodeU32 (0x0101, false);
+  assert (decode_64 == 64 && "Scale compact decoder error for 64");
+
+  uint64_t decode_255 = decodeU32 (0x03fd, false);
+  assert (decode_255 == 255 && "Scale compact decoder error for 255");
+
+  uint64_t decode_511 = decodeU32 (0x07fd, false);
+  assert (decode_511 == 511 && "Scale compact decoder error for 511");
+
+  uint64_t decode_16383 = decodeU32 (0xfffd, false);
+  assert (decode_16383 == 16383 && "Scale compact decoder error for 16383");
+
+  // test 4 bytes encoded mode: swap bytes flag is false
+  uint64_t decode_16384 = decodeU32 (0x00010002, false);
+  assert (decode_16384 == 16384 && "Scale compact decoder error for 16384");
+
+  uint64_t decode_65535 = decodeU32 (0x0003fffe, false);
+  assert (decode_65535 == 65535 && "Scale compact decoder error for 65535");
+
+  uint64_t decode_max4bytes = decodeU32 (0xfffffffe, false);
+  assert (decode_max4bytes == 1073741823ul && "Scale compact decoder error for 1073741823");
+
+
+  // test 1 byte encoded mode with reversed bytes order: swap bytes flag is true
+  uint64_t decode_0Rev = decodeU32 (0, true);
+  assert (decode_0Rev == 0 && "Scale compact decoder error for swapped 0");
+
+  uint64_t decode_1Rev = decodeU32 (4, true);
+  assert (decode_1Rev == 1 && "Scale compact decoder error for swapped 1");
+
+  uint64_t decode_63Rev = decodeU32 (252, true);
+  assert (decode_63Rev == 63 && "Scale compact decoder error for swapped 63");
+
+  // test 2 bytes encoded mode with reversed bytes order: swap bytes flag is true
+  uint64_t decode_64Rev = decodeU32 (0x0101, true);
+  assert (decode_64Rev == 64 && "Scale compact decoder error for swapped 64");
+
+  uint64_t decode_255Rev = decodeU32 (0xfd03, true);
+  assert (decode_255Rev == 255 && "Scale compact decoder error for swapped 255");
+
+  uint64_t decode_511Rev = decodeU32 (0xfd07, true);
+  assert (decode_511Rev == 511 && "Scale compact decoder error for swapped 511");
+
+  uint64_t decode_16383Rev = decodeU32 (0xfdff, true);
+  assert (decode_16383Rev == 16383 && "Scale compact decoder error for swapped 16383");
+
+ // test 4 bytes encoded mode with reversed bytes order: swap bytes flag is true
+  uint64_t decode_16384Rev = decodeU32 (0x02000100, true);
+  assert (decode_16384Rev == 16384 && "Scale compact decoder error for swapped 16384");
+
+  uint64_t decode_65535Rev = decodeU32 (0xfeff0300, true);
+  assert (decode_65535Rev == 65535 && "Scale compact decoder error for swapped 65535");
+
+  uint64_t decode_max4bytesRev = decodeU32 (0xfeffffff, true);
+  assert (decode_max4bytesRev == 1073741823ul && "Scale compact decoder error for swapped 1073741823");
+
+
+  // test BigInt mode: mode byte is equal 3. While it is not implemented 0 is returned.
+  uint64_t decode_BigInt1 = decodeU32 (3, true);
+  assert (decode_BigInt1 == 0 && "Scale compact decoder BigInt1 error for 1 byte wrong input");
+
+  uint64_t decode_BigInt1Rev = decodeU32 (3, true);
+  assert (decode_BigInt1Rev == 0 && "Scale compact decoder error for swapped 1 byte wrong input");
+
+  uint64_t decode_BigInt2 = decodeU32 (0x0703, false);
+  assert (decode_BigInt2 == 0 && "Scale compact decoder error for 2 bytes wrong input");
+
+  uint64_t decode_BigInt2Rev = decodeU32 (0x0307, true);
+  assert (decode_BigInt2Rev == 0 && "Scale compact decoder error for swapped 2 bytes wrong input");
+
+  uint64_t decode_BigInt4 = decodeU32 (0xfffffff3, false);
+  assert (decode_BigInt4 == 0 &&  "Scale compact decoder error for 4 bytes wrong input");
+
+  uint64_t decode_BigInt4Rev = decodeU32 (0xffffffff, true);
+  assert (decode_BigInt4Rev == 0 && "Scale compact decoder error for swapped 4 bytes wrong input");
+}
+
 int main () {
   test_callDatalogRecord();
   test_doPayload();
   test_doSign();
   test_doEncode();
+  test_DecodeU32();
 }
