@@ -34,13 +34,28 @@ jobs:
           cd robonomics-client-cpp 
           ARDUINO_SKETCH=$(arduino-cli config dump | grep sketchbook_path | awk '{ print $2 }')
           mkdir $ARDUINO_SKETCH
-          mv libraries/ $ARDUINO_SKETCH/
+          cp -r libraries/ $ARDUINO_SKETCH/
           cp rpcjsonc/rpcjsonc.ino $ARDUINO_SKETCH/rpcjsonc.ino
           cd ..
-          rm -rf robonomics-client-cpp
 
       - name: Build 
         run: |
           ARDUINO_SKETCH=$(arduino-cli config dump | grep sketchbook_path | awk '{ print $2 }')
           cd $ARDUINO_SKETCH 
           /usr/bin/arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 rpcjsonc.ino
+          cd ..
+      
+      # Testing
+      - name: Install cryptopp from repo
+        run: |
+          git clone https://github.com/weidai11/cryptopp
+          cd cryptopp
+          make libcryptopp.a libcryptopp.so -j4
+          make install PREFIX=/usr/local  -j4
+          ldconfig
+
+      - name: Library Unit tests 
+        run: |
+          cd ~/robonomics-client-cpp/tests
+          g++ test_call.c -o test_call -DUNIT_TEST -L/usr/local/lib -lcryptopp
+          ./test_call 
