@@ -2,11 +2,17 @@
 #include <string>
 
 #include <Arduino.h>
+#include <EEPROM.h>
+#include <Defines.h>
+#include <RpcRobonomics.h>
+
+#ifdef ESP32_MODEL
+#include <WiFi.h>
+#include <HTTPClient.h>
+#else
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
-#include <EEPROM.h>
-
-#include <RpcRobonomics.h>
+#endif
 
 // WiFi credentials and private keys are hidden in Private.h file
 // pub keys are derived on ctor of RobonomicsRpc
@@ -147,7 +153,7 @@ void loop () {
 #else
         Serial.println("RPC RWS task run");
         RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_DEVICE_KEY, SS58_DEVICE_ADR, id_counter);
-        RpcResult r = rpcProvider.RwsDatalogRecord(PUB_OWNER_KEY, std::to_string(id_counter));
+        RpcResult r = rpcProvider.RwsDatalogRecord(PUB_OWNER_KEY, PUB_OWNER_KEY);
 #endif        
         coins_count += 10000;
         id_counter = id_counter + 2;

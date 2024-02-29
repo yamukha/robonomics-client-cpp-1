@@ -1,0 +1,4 @@
+7c7
+< // #define ESP32_MODEL
+---
+> #define ESP32_MODEL

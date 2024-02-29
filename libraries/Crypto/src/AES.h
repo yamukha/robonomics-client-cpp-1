@@ -27,7 +27,8 @@
 
 // Determine which AES implementation to export to applications.
 #if defined(ESP32)
-#define CRYPTO_AES_ESP32 1
+// fix to allow build for ESP32
+// #define CRYPTO_AES_ESP32 1
 #else
 #define CRYPTO_AES_DEFAULT 1
 #endif
