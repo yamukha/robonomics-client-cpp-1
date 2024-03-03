@@ -1,12 +1,17 @@
 #pragma once 
 
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-
+#include <Defines.h>
 #include <Extrinsic.h>
 #include <Call.h>
 #include <JsonUtils.h>
-#include <Defines.h>
+
+#ifdef ESP32_MODEL
+#include <WiFi.h>
+#include <HTTPClient.h>
+#else
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#endif
 
 typedef struct {
    std::string body;      // responce body

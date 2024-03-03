@@ -9,7 +9,7 @@ There are in .github/workflows/ files:\
 esp-extrinsics.yml        ->  act -j esp8622  ->  to build by arduino-cli binary for target device and run library unit tests
 
 # Deploy 
-1. Set up in Private.h file proper values of keys and addresses for subscription owner and device.\
+1. Set up in Private.h file proper values of keys (Note: ED25519 scheme!) and addresses for subscription owner and device.\
     Note: to explore/create existing key/address can be used sub.py script from this repository or subkey utility from substrate\
     i.e. to get keys for known account mnemonic phrase:\
     subkey inspect "some ... mnemonics" --network robonomics --scheme ed25519\
