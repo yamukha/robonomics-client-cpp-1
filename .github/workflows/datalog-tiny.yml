@@ -14,6 +14,7 @@ jobs:
       - name: Install arduino-cli for esp8622
         run: |
           sudo apt-get install curl git -y
+          pip3 install pyserial
           cd ~
           mkdir arduino-init 
           cd arduino-init 
@@ -27,6 +28,7 @@ jobs:
           echo '      - http://arduino.esp8266.com/stable/package_esp8266com_index.json' >> $ARDUINO_YAML
           arduino-cli core update-index
           arduino-cli core install esp8266:esp8266
+          arduino-cli core install esp32:esp32
         
       - name: Clone datalog-tiny repo
         run: |
@@ -45,7 +47,16 @@ jobs:
           ARDUINO_SKETCH=$(arduino-cli config dump | grep sketchbook_path | awk '{ print $2 }')
           cd $ARDUINO_SKETCH 
           /usr/bin/arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 rpcjsonc.ino
+          patch libraries/RpcRobonomics/Defines.h libraries/RpcRobonomics/esp32.diff
+          /usr/bin/arduino-cli compile --fqbn esp32:esp32:nodemcu-32s rpcjsonc.ino
+          /usr/bin/arduino-cli compile --fqbn esp32:esp32:esp32s3 rpcjsonc.ino
           cd ..
+      # Upload
+      # sudo chmod a+rw /dev/ttyUSB0
+      # sudo chmod a+rw /dev/ttyAMC0
+      # arduino-cli upload --port /dev/ttyUSB0 --fqbn esp8266:esp8266:nodemcuv2
+      # arduino-cli upload --port /dev/ttyUSB0 --fqbn esp32:esp32:nodemcu-32s:UploadSpeed=115200
+      # arduino-cli upload --port /dev/ttyACM0 --fqbn esp32:esp32:esp32s3
       
       # Testing
       - name: Install cryptopp from repo
