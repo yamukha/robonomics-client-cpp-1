@@ -13,6 +13,12 @@
 #include <ESP8266HTTPClient.h>
 #endif
 
+#ifdef USE_ARDUINO
+#include <BLAKE2b.h>
+#else
+#include <Blake2.h>
+#endif
+
 typedef struct {
    std::string body;      // responce body
    uint32_t code;         // http responce code 200, 404, 500 etc.
@@ -20,7 +26,7 @@ typedef struct {
 
 class RobonomicsRpc { 
   public:     
-    RobonomicsRpc (WiFiClient client, std::string url, std::string key, std::string ss58adr, uint64_t id)
+    RobonomicsRpc (WiFiClient client, std::string url, std::string key, std::string ss58adr, uint64_t id, RunTimeData rtd)
         : wifi_(client), url_(url), ss58adr_(ss58adr), isGetParameters_ (true), id_counter_(id)
         {  
           std::vector<uint8_t> vk = hex2bytes(key);
@@ -40,11 +46,30 @@ class RobonomicsRpc {
              head_rws_ = Data{0x13,0};
           }
 
-          ghash_ = getBlockHash(is_remote_url_);
-          bhash_ = getBlockHash(is_remote_url_);
+          // Get from ctor TxData struct
+          if (rtd.hasHash ) {
+            // use runtime data
+            bhash_ = rtd.bhash.erase(0,2); // remove '0x'
+            ghash_ = rtd.ghash.erase(0,2);
+          } else {
+            // use defaults
+            ghash_ = getBlockHash(is_remote_url_);
+            bhash_ = getBlockHash(is_remote_url_);
+          }
 
-          Serial.printf("Node mode: %s, genesis block hash: 0x%s\n", is_remote_url_?"remote":"local", ghash_.c_str());
-
+          if (rtd.hasRunTimeData) {
+            // use runtime data
+            specVersion_ = rtd.specVersion;
+            tx_version_  = rtd.tx_version;
+          } else {
+            // use defaults
+            tx_version_ = 1;
+            if (is_remote_url_) // local 1 remote 33
+              specVersion_ = 33;
+            else
+              specVersion_ = 1;
+          }
+          log_printf("Node mode: %s, genesis block hash: 0x%s\n", is_remote_url_?"remote":"local", ghash_.c_str());
         };
 
     RpcResult DatalogRecord (std::string record) {
@@ -56,7 +81,7 @@ class RobonomicsRpc {
       HTTPClient http;    
       http.begin(wifi_, url_.c_str());
       http.addHeader("Content-Type", "application/json");
-      Serial.print("[HTTP]+POST:\n"); 
+      log_printf("[HTTP]+POST:\n");
       JSONVar params; 
       String jsonString;
       if (isGetParameters_) {
@@ -65,78 +90,46 @@ class RobonomicsRpc {
         jsonString = fillParamsJs (edata_,id_counter_);
         edata_.clear();
       }
-      Serial.println("sent:");
-      Serial.println(jsonString);
+      log_println("sent:");
+      log_println(jsonString);
       id_counter_++;
     
       int httpCode = http.POST(jsonString);
 
       if (httpCode > 0) {
-          Serial.printf("[HTTP]+POST code: %d\n", httpCode);
+          log_printf("[HTTP]+POST code: %d\n", httpCode);
             if (httpCode == HTTP_CODE_OK) {
               const String& payload = http.getString();
-              Serial.println("received:");
-              Serial.println(payload);
+              log_println("received:");
+              log_println(payload);
          
               JSONVar myObject = JSON.parse(payload);
               if (JSON.typeof(myObject) == "undefined") {
-                  Serial.println("");
+                  log_println("");
                   RpcResult r {"Parsing input failed!", -100};
                   return r;               
               } else {
                 // RPC FSM                 
-                JSONVar keys = myObject.keys();
                 bool res_ = false;
-                JSONVar val;
-                FromJson fj;
-                  
-                //"result" or "error" 
-                for (int i = 0; i < keys.length(); i++) { 
-                  JSONVar value = myObject[keys[i]];
-                  String str  = JSON.stringify (keys[i]);
-                 
-                  if(strstr(str.c_str(),"result")) {
-                    res_ = true;
-                    val = value;
-                  }
-       
-                  if(strstr(str.c_str(),"error"))  {
-                    val = value;
-                    isGetParameters_ = true;
-                  }
+                TxData txData = {.ghash = ghash_, .bhash = bhash_, .specVersion = specVersion_, .tx_version = tx_version_};
+                std::optional <int> parsedRes;
+                if (isGetParameters_ && a ==0)
+                  parsedRes = parseJsonResultInt(payload);
+                if (parsedRes.has_value()) {
+                  txData.nonce = parsedRes.value();
+                  log_printf("Nonce: %d\n", txData.nonce);
+                  res_ = true;
+                } else {
+                  isGetParameters_ = true;
                 }
-                
                 // -- 2nd stage: create and send extrinsic
                 if (res_) {
-                  Serial.println("Try 2nd stage with datalog extrinsic"); 
                   if (isGetParameters_) {
-                    fj = parseJson (val);
-                    fj.ghash = ghash_;
-                    fj.bhash = bhash_;
-                    fj.nonce = (uint64_t) decodeU32(fj.nonce, false);
+                    log_println("Try 2nd stage with extrinsic");
                     Data call = callDatalogRecord(head_dr_, record); // call header for Datalog record + some payload
-#ifdef DEBUG_PRINT
-                    Serial.println("Nonce decoded: " + String(fj.nonce));
-                    Serial.printf("Сall size %d : \n", call.size());
-                    for (int k = 0; k < call.size(); k++) 
-                       Serial.printf("%02x", call[k]);
-#endif
-                    Data data_ = doPayload (call, fj.era, fj.nonce, fj.tip, fj.specVersion, fj.tx_version, fj.ghash, fj.bhash);
-#ifdef DEBUG_PRINT
-                    Serial.printf("\nPayload size %d : \n", data_.size());
-                    for (int k = 0; k < data_.size(); k++) 
-                       Serial.printf("%02x", data_[k]);
-#endif
-                    Data signature_ = doSign (data_, privateKey_, publicKey_);
-#ifdef DEBUG_PRINT
-                    Serial.printf("\nSignatured size %d : \n", signature_.size());
-                    for (int k = 0; k < signature_.size(); k++) 
-                       Serial.printf("%02x", signature_[k]);
-                    Serial.println("");
-#endif
-                    std::vector<std::uint8_t> pubKey( reinterpret_cast<std::uint8_t*>(std::begin(publicKey_)), reinterpret_cast<std::uint8_t*>(std::end(publicKey_)));
-                    edata_ = doEncode (signature_, pubKey, fj.era, fj.nonce, fj.tip, call);
-                    Serial.printf("Extrinsic %s: size %d\n", "DatalogRecord", edata_.size());
+                    printBytes("Сall size ", call);
+                    edata_ = doExtrinsic (call, privateKey_, publicKey_, txData);
+                    log_printf("Extrinsic %s: size %d\n", "DatalogRecord", edata_.size());
                     isGetParameters_ = false;
                   } else {
                     isGetParameters_ = true;
@@ -145,8 +138,11 @@ class RobonomicsRpc {
                   }
                 } else {
                   isGetParameters_ = true;
-                  RpcResult r {"htpp O.K. but RPC error ", httpCode};
-                  return r;
+                  if (a ==1) {
+                    std::string rs = parseJsonResult(payload);
+                    RpcResult r {"htpp O.K. " + rs, httpCode};
+                    return r;
+                  }
                }// res_
            } // json parse
         } else {
@@ -168,13 +164,13 @@ class RobonomicsRpc {
   RpcResult TransferBalance (std::string dst, uint64_t fee) {
 
     Data edata_;
-    
+
     for (int a = 0 ; a < 2;  a++) {
 
       HTTPClient http;    
       http.begin(wifi_, url_.c_str());
       http.addHeader("Content-Type", "application/json");
-      Serial.print("[HTTP]+POST:\n"); 
+      log_printf("[HTTP]+POST:\n");
       JSONVar params; 
       String jsonString;
       if (isGetParameters_) {
@@ -183,62 +179,46 @@ class RobonomicsRpc {
         jsonString = fillParamsJs (edata_,id_counter_);
         edata_.clear();
       }
-      Serial.println("sent:");
-      Serial.println(jsonString);
+      log_println("sent:");
+      log_println(jsonString);
       id_counter_++;
     
       int httpCode = http.POST(jsonString);
 
       if (httpCode > 0) {
-          Serial.printf("[HTTP]+POST code: %d\n", httpCode);
+          log_printf("[HTTP]+POST code: %d\n", httpCode);
             if (httpCode == HTTP_CODE_OK) {
               const String& payload = http.getString();
-              Serial.println("received:");
-              Serial.println(payload);
+              log_println("received:");
+              log_println(payload);
          
               JSONVar myObject = JSON.parse(payload);
               if (JSON.typeof(myObject) == "undefined") {
-                  Serial.println("");
+                  log_println("");
                   RpcResult r {"Parsing input failed!", -100};
-                  return r;               
+                  return r;
               } else {
-                // RPC FSM                 
-                JSONVar keys = myObject.keys();
+                // RPC FSM
                 bool res_ = false;
-                JSONVar val;
-                FromJson fj;
-                  
-                //"result" or "error" 
-                for (int i = 0; i < keys.length(); i++) { 
-                  JSONVar value = myObject[keys[i]];
-                  String str  = JSON.stringify (keys[i]);
-                 
-                  if(strstr(str.c_str(),"result")) {
-                    res_ = true;
-                    val = value;
-                  }
-       
-                  if(strstr(str.c_str(),"error"))  {
-                    val = value;
-                    isGetParameters_ = true;
-                  }
+                TxData txData = {.ghash = ghash_, .bhash = bhash_, .specVersion = specVersion_, .tx_version = tx_version_};
+                std::optional <int> parsedRes;
+                if (isGetParameters_ && a == 0)
+                  parsedRes = parseJsonResultInt(payload);
+                if (parsedRes.has_value()) {
+                  txData.nonce = parsedRes.value();
+                  log_printf("Nonce: %d\n", txData.nonce);
+                  res_ = true;
+                } else {
+                  isGetParameters_ = true;
                 }
-                
                 // -- 2nd stage: create and send transfer balance extrinsic
                 if (res_) {
-                  Serial.println("Try 2nd stage with extrinsic"); 
                   if (isGetParameters_) {
-                    fj = parseJson (val);
-                    fj.ghash = ghash_;
-                    fj.bhash = bhash_;
-                    fj.nonce = (uint64_t) decodeU32(fj.nonce, false);
-                    Serial.println("Nonce decoded: " + String(fj.nonce));
+                    log_println("Try 2nd stage with extrinsic");
                     Data call = callTransferBalance(head_bt_, dst, fee); // call header for Traansfer Balance + some payload
-                    Data data_ = doPayload (call, fj.era, fj.nonce, fj.tip, fj.specVersion, fj.tx_version, fj.ghash, fj.bhash);
-                    Data signature_ = doSign (data_, privateKey_, publicKey_);
-                    std::vector<std::uint8_t> pubKey( reinterpret_cast<std::uint8_t*>(std::begin(publicKey_)), reinterpret_cast<std::uint8_t*>(std::end(publicKey_)));               
-                    edata_ = doEncode (signature_, pubKey, fj.era, fj.nonce, fj.tip, call);
-                    Serial.printf("extrinsic %s: size %d\n", "TransferBalance", edata_.size());
+                    printBytes("Сall size ", call);
+                    edata_ = doExtrinsic (call, privateKey_, publicKey_, txData);
+                    log_printf("extrinsic %s: size %d\n", "TransferBalance", edata_.size());
                     isGetParameters_ = false;
                   } else {
                     isGetParameters_ = true;
@@ -247,8 +227,11 @@ class RobonomicsRpc {
                   }
                 } else {
                   isGetParameters_ = true;
-                  RpcResult r {"htpp O.K. but RPC error ", httpCode};
-                  return r;
+                  if (a ==1) {
+                    std::string rs = parseJsonResult(payload);
+                    RpcResult r {"htpp O.K. " + rs, httpCode};
+                    return r;
+                  }
                }// res_
            } // json parse
         } else {
@@ -276,7 +259,7 @@ class RobonomicsRpc {
       HTTPClient http;    
       http.begin(wifi_, url_.c_str());
       http.addHeader("Content-Type", "application/json");
-      Serial.print("[HTTP]+POST:\n"); 
+      log_printf("[HTTP]+POST:\n");
       JSONVar params; 
       String jsonString;
       if (isGetParameters_) {
@@ -285,80 +268,46 @@ class RobonomicsRpc {
         jsonString = fillParamsJs (edata_,id_counter_);
         edata_.clear();
       }
-      Serial.println("sent:");
-      Serial.println(jsonString);
+      log_printf("sent: %s \n", jsonString.c_str());
       id_counter_++;
-    
       int httpCode = http.POST(jsonString);
 
       if (httpCode > 0) {
-          Serial.printf("[HTTP]+POST code: %d\n", httpCode);
+          log_printf("[HTTP]+POST code: %d\n", httpCode);
             if (httpCode == HTTP_CODE_OK) {
               const String& payload = http.getString();
-              Serial.println("received:");
-              Serial.println(payload);
-         
+              log_printf("received: %s\n", payload.c_str());
               JSONVar myObject = JSON.parse(payload);
               if (JSON.typeof(myObject) == "undefined") {
-                  Serial.println("");
+                  log_println("");
                   RpcResult r {"Parsing input failed!", -100};
                   return r;               
               } else {
-                // RPC FSM                 
-                JSONVar keys = myObject.keys();
+                // RPC FSM
                 bool res_ = false;
-                JSONVar val;
-                FromJson fj;
-                  
-                //"result" or "error" 
-                for (int i = 0; i < keys.length(); i++) { 
-                  JSONVar value = myObject[keys[i]];
-                  String str  = JSON.stringify (keys[i]);
-                 
-                  if(strstr(str.c_str(),"result")) {
-                    res_ = true;
-                    val = value;
-                  }
-       
-                  if(strstr(str.c_str(),"error"))  {
-                    val = value;
-                    isGetParameters_ = true;
-                  }
+                TxData txData = {.ghash = ghash_, .bhash = bhash_, .specVersion = specVersion_, .tx_version = tx_version_};
+                std::optional <int> parsedRes;
+                if (isGetParameters_ && a == 0)
+                  parsedRes = parseJsonResultInt(payload);
+                if (parsedRes.has_value()) {
+                  txData.nonce = parsedRes.value();
+                  log_printf("Nonce: %d\n", txData.nonce);
+                  res_ = true;
+                } else {
+                  isGetParameters_ = true;
                 }
-                
                 // -- 2nd stage: create and send extrinsic
                 if (res_) {
-                  Serial.println("Try 2nd stage with RWS extrinsic"); 
                   if (isGetParameters_) {
-                    fj = parseJson (val);
-                    fj.ghash = ghash_;
-                    fj.bhash = bhash_;
-                    fj.nonce = (uint64_t) decodeU32(fj.nonce, false);
+                    log_println("Try 2nd stage with extrinsic");
                     // Prepare datalog record for nesting:  call header for Datalog record + some payload
                     Data call_nested =  callDatalogRecord(head_dr_, dataSubmit);
+                    log_printf("Submitted datalog size %d: %s\n", dataSubmit.size(), dataSubmit.c_str());
+                    printBytes("Сall Datalog size ", call_nested);
                     Data call = callRws(head_rws_, ownerKey, call_nested); // inject nested call into RWS call
-#ifdef DEBUG_PRINT
-                    Serial.println("Nonce decoded: " + String(fj.nonce));
-                    Serial.printf("Сall size %d : \n", call.size());
-                    for (int k = 0; k < call.size(); k++) 
-                       Serial.printf("%02x", call[k]);
-#endif
-                    Data data_ = doPayload (call, fj.era, fj.nonce, fj.tip, fj.specVersion, fj.tx_version, fj.ghash, fj.bhash);
-#ifdef DEBUG_PRINT
-                    Serial.printf("\nPayload size %d : \n", data_.size());
-                    for (int k = 0; k < data_.size(); k++) 
-                       Serial.printf("%02x", data_[k]);
-#endif
-                    Data signature_ = doSign (data_, privateKey_, publicKey_);
-#ifdef DEBUG_PRINT
-                    Serial.printf("\nSignatured size %d : \n", signature_.size());
-                    for (int k = 0; k < signature_.size(); k++) 
-                       Serial.printf("%02x", signature_[k]);
-                    Serial.println("");
-#endif
-                    std::vector<std::uint8_t> pubKey( reinterpret_cast<std::uint8_t*>(std::begin(publicKey_)), reinterpret_cast<std::uint8_t*>(std::end(publicKey_)));
-                    edata_ = doEncode (signature_, pubKey, fj.era, fj.nonce, fj.tip, call);
-                    Serial.printf("Extrinsic %s: size %d\n", "RWS+DatalogRecord", edata_.size());
+                    printBytes("Сall size ", call);
+                    edata_ = doExtrinsic (call, privateKey_, publicKey_, txData);
+                    log_printf("Extrinsic %s: size %d\n", "RWS+DatalogRecord", edata_.size());
                     isGetParameters_ = false;
                   } else {
                     isGetParameters_ = true;
@@ -367,8 +316,11 @@ class RobonomicsRpc {
                   }
                 } else {
                   isGetParameters_ = true;
-                  RpcResult r {"htpp O.K. but RPC error ", httpCode};
-                  return r;
+                  if (a ==1) {
+                    std::string rs = parseJsonResult(payload);
+                    RpcResult r {"htpp O.K. " + rs, httpCode};
+                    return r;
+                  }
                }// res_
            } // json parse
         } else {
@@ -401,4 +353,6 @@ class RobonomicsRpc {
     Data head_bt_;          // call header for Balance transfer
     std::string bhash_;
     std::string ghash_;
+    uint32_t specVersion_;
+    uint32_t tx_version_;
 };

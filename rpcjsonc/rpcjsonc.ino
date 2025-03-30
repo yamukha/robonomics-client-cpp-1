@@ -14,6 +14,8 @@
 #include <ESP8266HTTPClient.h>
 #endif
 
+#include <WebRpc.h>
+
 // WiFi credentials and private keys are hidden in Private.h file
 // pub keys are derived on ctor of RobonomicsRpc
 // need to have derived or generated PUB_OWNER_KEY, SS58_ADR, SS58_DEVICE_ADR
@@ -30,7 +32,9 @@
 #define READ_UART_TIMEOUT 3
 
 uint64_t id_counter = 0; 
-uint64_t coins_count = 100000; 
+uint64_t coins_count = 100000;
+RunTimeData rtd;
+std::string adr58 = ""; //SS58_DEVICE_ADR;
 
 size_t GetCRC (std::string url, size_t len) {
   uint64_t sum = 0;
@@ -141,23 +145,55 @@ void setup() {
 }
 
 void loop () {
-    if ((WiFi.status() == WL_CONNECTED)) { 
-        WiFiClient client;        
+    if ((WiFi.status() == WL_CONNECTED)) {
+        WiFiClient client;
+
+        //  Get runtime parameters by RPC methods:
+        // - state_getRuntimeVersion to get specVersion and transactionVersion
+        // - chain_getBlockHash and/or chain_getHead to get genesis_hash
+        // - pass to changed ctor in RunTimeData struct
+        // - derive address from PRIV_KEY (over bub key)
+
+        if (adr58 == "")
+           adr58 = doAddress(PRIV_DEVICE_KEY);
+        if (!rtd.hasHash) { // && rtd.hasRunTimeData) {
+          rtd = rpcGetRT(client, robonomics_url, "state_getRuntimeVersion", "", id_counter);
+          id_counter++;
+          // std::string bhash = rpcGet(client, robonomics_url, "chain_getBlockHash", "", id_counter); // "" for the last block
+          // rtd.bhash = bhash;
+          // id_counter++;
+          std::string ghash = rpcGet(client, robonomics_url, "chain_getBlockHash", "0", id_counter);;
+          rtd.ghash = ghash;
+          rtd.bhash = ghash;
+          id_counter++;
+          rtd.hasHash = true;
+        }
 
 #define RWS_EXTRINSIC
+#define DATALOG_EXTRINSIC
+
 #ifndef RWS_EXTRINSIC
-        Serial.println("RPC task run");
-        RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, SS58_ADR, id_counter);
+#ifdef DATALOG_EXTRINSIC
+        Serial.printf("\n[RPC]: Datalog task run\n");
+        RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, SS58_ADR, id_counter, rtd);
         RpcResult r = rpcProvider.DatalogRecord(std::to_string(id_counter)); // id_counter as payload just for example
-        //RpcResult r = rpcProvider.TransferBalance(PUB_OWNER_KEY, coins_count); // coins_count as fee just for example
 #else
-        Serial.println("RPC RWS task run");
-        RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_DEVICE_KEY, SS58_DEVICE_ADR, id_counter);
-        RpcResult r = rpcProvider.RwsDatalogRecord(PUB_OWNER_KEY, PUB_OWNER_KEY);
-#endif        
+        Serial.printf("\n[RPC]: TX balance task run\n");
+        RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, SS58_ADR, id_counter, rtd);
+        RpcResult r = rpcProvider.TransferBalance(PUB_OWNER_KEY, coins_count); // coins_count as fee just for example
+#endif
+#else
+        Serial.printf("\n[RPC]: RWS task run\n");
+        RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, adr58, id_counter, rtd);
+        //RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, SS58_DEVICE_ADR, id_counter, rtd);
+        std::string payload = R"({"SDS_P1":11.45,"SDS_P2":7.50,"noiseMax":48.0,"noiseAvg":47.55,"temperature":20.95,"press":687.97,"humidity":62.5,"lat":0.000000,"lon":0.00000})"; // max len < 144 
+        std::string payloads = R"({temperature:20.9,pressure:687.97,humidity:62.5,p1:11.45,p2:7.50,nm:48.00,na:47.55})";
+        std::string payloadx = payload + payload + payload + payloads; //  512 bytes: max size of record
+        RpcResult r = rpcProvider.RwsDatalogRecord(PUB_OWNER_KEY, payloadx);
+#endif
         coins_count += 10000;
         id_counter = id_counter + 2;
-        Serial.printf("[RPC] %ld %s\n\n", r.code, r.body.c_str());  
+        Serial.printf("[RPC] %ld %s\n", r.code, r.body.c_str());  
         delay(12000);
     }
 }

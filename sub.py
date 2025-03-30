@@ -38,17 +38,23 @@ with open(mnemonics_dir + 'mnemonicsD.txt', 'r') as file:
 if len(sys.argv) > 1 and sys.argv[1] == "local":
     wait4inclusion = False
     #block_hash = "0x5a73dd6af880604a183bff15a19599fd386f00264ab1dd56813fda7eaffe456e"
+    block_hash = "0x368d43155203b23de832b622b96172a5e5e8143a19342a240974c5c8394662bc"
     #node_url =  url="ws://127.0.0.1:9944"
-    node_url =  url="http://127.0.0.1:9933"
+    #node_url =  url="http://127.0.0.1:9944"
+    node_url =  url="http://192.168.0.103:9944"
+    # node_url =  url="ws://192.168.0.103:9944"
     #keypair  = Keypair.create_from_uri('//Alice')
     #keypairM = Keypair.create_from_uri('//Bob')
 
 else:
     wait4inclusion = False
-    #block_hash = "0x631ccc82a078481584041656af292834e1ae6daab61d2875b4dd0c14bb9b17bc"
-    node_url =  url="http://kusama.rpc.robonomics.network/rpc/"
+    block_hash = "0x631ccc82a078481584041656af292834e1ae6daab61d2875b4dd0c14bb9b17bc"
+    # node_url =  url="http://kusama.rpc.robonomics.network/rpc/"
+    node_url =  url="ws://kusama.rpc.robonomics.network/rpc/"
+    # node_url =  url="http://192.168.0.103:9944"
+    # block_hash = "0x368d43155203b23de832b622b96172a5e5e8143a19342a240974c5c8394662bc"
 
-#print('node_url: "{}", block_hash: "{}" "{}"'.format(node_url, block_hash, len(sys.argv)))
+print('node_url: "{}", block_hash: "{}" "{}"'.format(node_url, block_hash, len(sys.argv)))
 
 try:
     substrate = SubstrateInterface(
@@ -94,7 +100,9 @@ call_dr = substrate.compose_call(
     call_module='Datalog',
     call_function='record',
     call_params={
-        'record': '0', 
+        'record': '{"SDS_P1":11.45,"SDS_P2":7.50,"noiseMax":48.0,"noiseAvg":47.55,"temperature":20.95,"press":687.97,"humidity":62.5,"lat":0.000000,"lon":0.00000}'
+        #'record': '{"temperature":20,"press":687.97,"humidity":62.5,"lat":0.000000,"lon":0.00000}'
+        # 'record': ' '
     }
 )
 
@@ -103,7 +111,7 @@ call_rws = substrate.compose_call(
     call_function='call',
     call_params={
         'subscription_id': '4FhjeTDgmS1nUWf12Xdr7tJCKNa2w23PmNnDFLSDhWA5ccNy',
-        'call': call_dr,
+        'call': call_dr
     }
 )
 
@@ -112,6 +120,7 @@ if len(sys.argv) > 2 and sys.argv[2] == "balance":
     call=call_bt
 if len(sys.argv) > 2 and sys.argv[2] == "rws":
     call=call_rws
+    print("RWS:")
     keypair = keypairD    
 
 # Get payment info
@@ -123,21 +132,26 @@ print ("call: ",call, "\nas bytes: ", call.encode())
 extrinsic = substrate.create_signed_extrinsic(
     call=call,
     keypair=keypair,
-    era={'period': 0},
-    # nonce = 2, # incremented ?
+    # era={'period': 0, 'current': 0},
+    # nonce = 437, # incremented ?
 )
-print("extrinsic: ", extrinsic)
+print("signed extrinsic: ", extrinsic)
 
-nonce = 0
+nonce = 444
+# nonce = 72
 era= {'period': 0,  'current': 0}
-signature_payload = substrate.generate_signature_payload(call=call, era=era, nonce=nonce)
+#signature_payload = substrate.generate_signature_payload(call=call, era=era, nonce=nonce)
+#signature_payload = substrate.generate_signature_payload(call=call, era=era) # +1 byte to 'record'
+signature_payload = substrate.generate_signature_payload(call=call,  nonce=nonce)  # +1 byte to 'record', like for ESP with correct nonce
+#signature_payload = substrate.generate_signature_payload(call=call)  # 1+1 byte to 'record'
 
 print("payload: ", signature_payload)
 
 try:
     print ('try submit')
-    # exit()
-    receipt = substrate.submit_extrinsic(extrinsic, wait_for_inclusion=wait4inclusion)
+    exit()
+    receipt = substrate.submit_extrinsic(extrinsic, wait_for_inclusion=wait4inclusion) # true for ws
+    # receipt = substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True) # signature_payload
     print('Extrinsic "{}" included in block "{}"'.format(
          receipt.extrinsic_hash, receipt.block_hash
     ))
