@@ -34,7 +34,6 @@
 uint64_t id_counter = 0; 
 uint64_t coins_count = 100000;
 RunTimeData rtd;
-std::string adr58 = ""; //SS58_DEVICE_ADR;
 
 size_t GetCRC (std::string url, size_t len) {
   uint64_t sum = 0;
@@ -80,11 +79,7 @@ void setup() {
       uint8_t url_eeprom_crc  = epprom_data[1];
   
       Serial.println("EPPROM URL size: " + String(url_eeprom_size) + " CRC: " + String(url_eeprom_crc));
-
-    if (url_eeprom_crc == 0 && url_eeprom_size == 32) {
-     robonomics_url = URLRPC;
-     Serial.println("Set URL to: " + String(robonomics_url.c_str()));
-    } else {
+  
       char tmp_data[url_eeprom_size];
       uint8_t j = 0;
       for (int i = url_eeprom_offset; i <= url_eeprom_size + url_eeprom_offset; i++, j++) {
@@ -102,7 +97,6 @@ void setup() {
       } else {
           Serial.println("Wrong CRC for url!");
       }
-    }      
   }
 
   if (!use_eeprom_args || new_eeprom_args) {
@@ -136,7 +130,7 @@ void setup() {
       use_eeprom_args = true;
       robonomics_url = urlRPC.c_str();
   }
-
+ 
   WiFi.begin(STASSID, STAPSK);
   Serial.printf ("Trying to connected to SSID: %s \n", STASSID);
   while (WiFi.status() != WL_CONNECTED) {
@@ -150,17 +144,16 @@ void setup() {
 }
 
 void loop () {
-    if ((WiFi.status() == WL_CONNECTED)) {
-        WiFiClient client;
-
+    if ((WiFi.status() == WL_CONNECTED)) { 
+        WiFiClient client;        
+        
+        //   TODO:
+        // - derive address from PRIV_KEY (over bub key)
+        
         //  Get runtime parameters by RPC methods:
         // - state_getRuntimeVersion to get specVersion and transactionVersion
         // - chain_getBlockHash and/or chain_getHead to get genesis_hash
         // - pass to changed ctor in RunTimeData struct
-        // - derive address from PRIV_KEY (over bub key)
-
-        if (adr58 == "")
-           adr58 = doAddress(PRIV_DEVICE_KEY);
         if (!rtd.hasHash) { // && rtd.hasRunTimeData) {
           rtd = rpcGetRT(client, robonomics_url, "state_getRuntimeVersion", "", id_counter);
           id_counter++;
@@ -175,30 +168,30 @@ void loop () {
         }
 
 #define RWS_EXTRINSIC
-#define DATALOG_EXTRINSIC
+//#define DATALOG_EXTRINSIC
 
 #ifndef RWS_EXTRINSIC
 #ifdef DATALOG_EXTRINSIC
-        Serial.printf("\n[RPC]: Datalog task run\n");
+        Serial.println("RPC Datalog task run");
         RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, SS58_ADR, id_counter, rtd);
         RpcResult r = rpcProvider.DatalogRecord(std::to_string(id_counter)); // id_counter as payload just for example
 #else
-        Serial.printf("\n[RPC]: TX balance task run\n");
+        Serial.println("RPC tx balance");
         RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, SS58_ADR, id_counter, rtd);
         RpcResult r = rpcProvider.TransferBalance(PUB_OWNER_KEY, coins_count); // coins_count as fee just for example
-#endif
+#endif        
 #else
-        Serial.printf("\n[RPC]: RWS task run\n");
-        RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, adr58, id_counter, rtd);
+        Serial.println("RPC RWS task run");
+        RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_DEVICE_KEY, SS58_DEVICE_ADR, id_counter, rtd);
         //RobonomicsRpc rpcProvider(client, robonomics_url, PRIV_KEY, SS58_DEVICE_ADR, id_counter, rtd);
         std::string payload = R"({"SDS_P1":11.45,"SDS_P2":7.50,"noiseMax":48.0,"noiseAvg":47.55,"temperature":20.95,"press":687.97,"humidity":62.5,"lat":0.000000,"lon":0.00000})"; // max len < 144 
         std::string payloads = R"({temperature:20.9,pressure:687.97,humidity:62.5,p1:11.45,p2:7.50,nm:48.00,na:47.55})";
         std::string payloadx = payload + payload + payload + payloads; //  512 bytes: max size of record
         RpcResult r = rpcProvider.RwsDatalogRecord(PUB_OWNER_KEY, payloadx);
-#endif
+#endif        
         coins_count += 10000;
         id_counter = id_counter + 2;
-        Serial.printf("[RPC] %ld %s\n", r.code, r.body.c_str());  
+        Serial.printf("[RPC] %ld %s\n\n", r.code, r.body.c_str());  
         delay(12000);
     }
 }
