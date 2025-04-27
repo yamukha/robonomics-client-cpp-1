@@ -17,7 +17,7 @@ jobs:
 
       - name: Install platformio and build with it
         run: |
-          apt-get install curl git -y
+          sudo apt-get install curl git -y
           pip3 install pyserial
           python3 -m venv /opt/venv
           PATH="/opt/venv/bin:$PATH"
@@ -48,7 +48,7 @@ jobs:
           cd arduino-init
           curl -L -o arduino-cli.tar.bz2 https://downloads.arduino.cc/arduino-cli/arduino-cli-latest-linux64.tar.bz2
           tar xjf arduino-cli.tar.bz2
-          mv arduino-cli /usr/bin/arduino-cli
+          sudo mv arduino-cli /usr/bin/arduino-cli
           arduino-cli core update-index --config-file arduino-cli.yaml
           ARDUINO_YAML=$(arduino-cli config init | awk '{ print $4 }')
           echo board_manager: >> $ARDUINO_YAML
@@ -97,8 +97,8 @@ jobs:
           git clone https://github.com/weidai11/cryptopp
           cd cryptopp
           make libcryptopp.a libcryptopp.so
-          make install PREFIX=/usr/local
-          ldconfig
+          sudo make install PREFIX=/usr/local
+          sudo ldconfig
 
       - name: Library Unit tests
         run: |
