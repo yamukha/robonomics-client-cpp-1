@@ -15,7 +15,7 @@ jobs:
           echo "REPO_NAME=${GITHUB_REPOSITORY#$GITHUB_REPOSITORY_OWNER/}" >> $GITHUB_ENV
           echo 'git repo ${GITHUB_REPOSITORY}'
 
-      - name: Install platformio and build with it
+      - name: Install platformio
         run: |
           sudo apt-get install curl git -y
           pip3 install pyserial
@@ -33,8 +33,8 @@ jobs:
           git clone https://github.com/${GITHUB_REPOSITORY}
           cd ${REPO_NAME}
           mkdir src
+          cp rpcjsonc/rpcjsonc.ino src/rpcjsonc.ino
           cp examples/platformio.ini platformio.ini
-          cp examples/rpcjsonc.ino src/rpcjsonc.ino
 
       - name: Build with platformio
         run: |
@@ -96,8 +96,8 @@ jobs:
         run: |
           git clone https://github.com/weidai11/cryptopp
           cd cryptopp
-          make libcryptopp.a libcryptopp.so
-          sudo make install PREFIX=/usr/local
+          make libcryptopp.a libcryptopp.so -j4
+          sudo make install PREFIX=/usr/local -j4
           sudo ldconfig
 
       - name: Library Unit tests
