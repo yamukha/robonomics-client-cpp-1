@@ -6,7 +6,7 @@ RWS with DatalogRecord
 
 # CI
 There are in .github/workflows/ files:\
-esp-extrinsics.yml        ->  act -j esp8622  ->  to build by arduino-cli binary for target device and run library unit tests
+datalog-tiny.yml  ->  act -j esp  ->  to build by arduino-cli binary for target device and run library unit tests
 
 # Deploy 
 1. Set up in Private.h file proper values of keys (Note: ED25519 scheme!) and addresses for subscription owner and device.\

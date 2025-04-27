@@ -9,11 +9,15 @@ on:
 jobs:
    esp:
     runs-on: ubuntu-latest
-
     steps:
+      - name: Set ENV variables
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY#$GITHUB_REPOSITORY_OWNER/}" >> $GITHUB_ENV
+          echo 'git repo ${GITHUB_REPOSITORY}'
+
       - name: Install platformio and build with it
         run: |
-          sudo apt-get install curl git -y
+          apt-get install curl git -y
           pip3 install pyserial
           python3 -m venv /opt/venv
           PATH="/opt/venv/bin:$PATH"
@@ -21,15 +25,21 @@ jobs:
           pipx completions
           python3 -m pipx ensurepath
           eval "$(register-python-argcomplete pipx)"
-          echo "git clone repo"
+          echo "git clone repo ${GITHUB_REPOSITORY}"
+
+      - name: Clone repo
+        run: |
           cd ~
-          git clone https://github.com/airalab/robonomics-client-cpp.git
-          cd robonomics-client-cpp
+          git clone https://github.com/${GITHUB_REPOSITORY}
+          cd ${REPO_NAME}
           mkdir src
           cp examples/platformio.ini platformio.ini
           cp examples/rpcjsonc.ino src/rpcjsonc.ino
-          pio run
-          cd ..
+
+      - name: Build with platformio
+        run: |
+          cd ~/${REPO_NAME}
+          /opt/venv/bin/pio run
 
       - name: Install arduino-cli
         run: |
@@ -38,7 +48,7 @@ jobs:
           cd arduino-init
           curl -L -o arduino-cli.tar.bz2 https://downloads.arduino.cc/arduino-cli/arduino-cli-latest-linux64.tar.bz2
           tar xjf arduino-cli.tar.bz2
-          sudo mv arduino-cli /usr/bin/arduino-cli
+          mv arduino-cli /usr/bin/arduino-cli
           arduino-cli core update-index --config-file arduino-cli.yaml
           ARDUINO_YAML=$(arduino-cli config init | awk '{ print $4 }')
           echo board_manager: >> $ARDUINO_YAML
@@ -48,11 +58,9 @@ jobs:
           arduino-cli core install esp8266:esp8266
           arduino-cli core install esp32:esp32
 
-      - name: Clone repo
+      - name: Create Arduino sketch
         run: |
-          cd ~
-          git clone https://github.com/airalab/robonomics-client-cpp.git
-          cd robonomics-client-cpp 
+          cd ~/${REPO_NAME}
           ARDUINO_SKETCH=$(arduino-cli config dump | grep sketchbook_path | awk '{ print $2 }')
           mkdir $ARDUINO_SKETCH
           cp -r libraries/ $ARDUINO_SKETCH/
@@ -63,10 +71,16 @@ jobs:
         run: |
           ARDUINO_SKETCH=$(arduino-cli config dump | grep sketchbook_path | awk '{ print $2 }')
           cd $ARDUINO_SKETCH
+          echo 'Start build for nodemcu-32s'
           /usr/bin/arduino-cli compile --fqbn esp32:esp32:nodemcu-32s rpcjsonc.ino
+          echo 'Build for nodemcu-32s done'
+          echo 'Start build for esp32s3'
           /usr/bin/arduino-cli compile --fqbn esp32:esp32:esp32s3 rpcjsonc.ino
+          echo 'Build for esp32s3 done'
+          echo 'build for esp8266'
           patch libraries/RpcRobonomics/Defines.h libraries/RpcRobonomics/esp8266.diff
           /usr/bin/arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 rpcjsonc.ino
+          echo 'Build for esp8266 done'
           cd ..
       # Upload
       # sudo chmod a+rw /dev/ttyUSB0
@@ -74,19 +88,21 @@ jobs:
       # arduino-cli upload --port /dev/ttyUSB0 --fqbn esp8266:esp8266:nodemcuv2
       # arduino-cli upload --port /dev/ttyUSB0 --fqbn esp32:esp32:nodemcu-32s:UploadSpeed=115200
       # arduino-cli upload --port /dev/ttyACM0 --fqbn esp32:esp32:esp32s3
+      # pio run -t upload
+      # pio device monitor -b 115200
 
       # Testing
       - name: Install cryptopp from repo
         run: |
           git clone https://github.com/weidai11/cryptopp
           cd cryptopp
-          make libcryptopp.a libcryptopp.so -j4
-          sudo make install PREFIX=/usr/local  -j4
-          sudo ldconfig
+          make libcryptopp.a libcryptopp.so
+          make install PREFIX=/usr/local
+          ldconfig
 
       - name: Library Unit tests
         run: |
-          cd ~/robonomics-client-cpp/tests
+          cd ~/${REPO_NAME}/tests
           g++ test_call.c -o test_call -DUNIT_TEST -L/usr/local/lib -lcryptopp
           # g++ test_call.c ../libraries/blake/Blake2b.cpp -o test_call  -DUSE_LINUX -I../libraries/blake  -L/usr/local/lib -lcryptopp
           ./test_call
