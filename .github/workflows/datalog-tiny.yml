@@ -1,10 +1,10 @@
 name: ESP extrinsics library
 on:
   push:
-  workflow_dispatch:
     branches:
-    - master
-    - main
+     - master
+     - main
+  workflow_dispatch:
 
 jobs:
    esp:
